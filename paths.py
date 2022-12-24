@@ -3,13 +3,9 @@ CLEAR = False
 TOKEN = '5861365734:AAHsaiUqaOKEeW0uY1Ewa8JCxCLagRtBsHE'
 my_username = '@romecolabot'
 
-# Это волшебная ссылка для добавления бота в группу, которую я искал 2 часа по всему интернету
-# Чтобы можно было сразу при добавлении настроить админские параметры бота, надо настроить бота в BotFather
 inviting_url = 'https://t.me/romecolabot?startgroup=hbase'
 ask_smn_url = 'https://t.me/d_lkem'
 
-# Всякие разные сообщения
-# Все сообщения написаны в формате MarkdownV2, который я считаю довольно удобным для минимального форматирования в тг
 start_message = 'Привет\! На связи *Ром\-Кола Бот* \- твой персональный помощник для управления чатами'
 
 help_message = 'У меня есть несколько очень полезных команд\n\n' \
@@ -65,12 +61,12 @@ thumb_width = 1000
 thumb_height = 1000
 
 help_command = '/help@romecolabot'
-add_bot_command = '/add\_to\_chat@romecolabot'
-kick_bot_command = '/kick\_romecolabot\_no\_please\_no@romecolabot'
+add_bot_command = '/add_to_chat@romecolabot'
+kick_bot_command = '/kick_romecolabot_no_please_no@romecolabot'
 stats_command = '/stats@romecolabot'
 ban_command = '/ban@romecolabot'
 unban_command = '/unban@romecolabot'
-promote_command = '/promote\_admin@romecolabot'
+promote_command = '/promote_admin@romecolabot'
 
 promote_description = 'User will be granted the same rights as you have, unless you are not a creator'
 

@@ -1,113 +1,110 @@
 import telebot
-from telebot import types
-from apscheduler.schedulers.background import BackgroundScheduler
-import datetime as dt
+from telebot import types, asyncio_helper
+import asyncio
+from telebot.async_telebot import AsyncTeleBot
 
 import paths as pth
 import chats_handler as ch
 import tg_exceptions as tge
 
-bot = telebot.TeleBot(pth.TOKEN)
+bot = AsyncTeleBot(pth.TOKEN)
 chats = ch.ChatsHandler(clear=pth.CLEAR)
-scheduler = BackgroundScheduler()
-
-scheduler.start()
 
 
 def add_chat_member(command_action):
-    def wrapper(message):
+    async def wrapper(message):
         user = message.from_user
         if message.chat.type in ['supergroup', 'group']:
             chats.add_user(message.chat.id, user.id, user.username,
                            user.first_name, user.last_name,
                            user.is_premium)
-        command_action(message)
+        await command_action(message)
     return wrapper
 
 
 def delete_command_message(command_action):
-    def wrapper(message):
-        bot.delete_message(message.chat.id, message.id)
-        command_action(message)
+    async def wrapper(message):
+        await bot.delete_message(message.chat.id, message.id)
+        await command_action(message)
     return wrapper
 
 
 def user_is_admin(command_action):
-    def wrapper(message):
-        cur_user = bot.get_chat_member(message.chat.id, message.from_user.id)
+    async def wrapper(message):
+        cur_user = await bot.get_chat_member(message.chat.id, message.from_user.id)
         if cur_user.status not in ['creator', 'administrator']:
             raise tge.UserNotAdminException(message.from_user.id)
-        command_action(message)
+        await command_action(message)
 
     return wrapper
 
 
 def admin_can_restrict(command_action):
-    def wrapper(message):
-        cur_user = bot.get_chat_member(message.chat.id, message.from_user.id)
+    async def wrapper(message):
+        cur_user = await bot.get_chat_member(message.chat.id, message.from_user.id)
         if cur_user.status == 'administrator' and not cur_user.can_restrict_members:
             raise tge.NoPermissionException(message.from_user.id, 'restrict members')
-        command_action(message)
+        await command_action(message)
 
     return wrapper
 
 
 def admin_can_promote(command_action):
-    def wrapper(message):
-        cur_user = bot.get_chat_member(message.chat.id, message.from_user.id)
+    async def wrapper(message):
+        cur_user = await bot.get_chat_member(message.chat.id, message.from_user.id)
         if cur_user.status == 'administrator' and not cur_user.can_promote_members:
             raise tge.NoPermissionException(message.from_user.id, 'promote members')
-        command_action(message)
+        await command_action(message)
 
     return wrapper
 
 
 def hello_its_me(command_action):
-    def wrapper(message):
+    async def wrapper(message):
         username = message.text.split()[1]
         if username == pth.my_username:
             raise tge.HelloItsMeException()
-        command_action(message)
+        await command_action(message)
 
     return wrapper
 
 
 def parse_exceptions(command_action):
-    def wrapper(message):
+    async def wrapper(message):
         bot_msg = None
         try:
-            command_action(message)
+            await command_action(message)
         except IndexError as e:
-            bot_msg = bot.send_message(message.chat.id, '⚠️Username was not given in command')
+            bot_msg = await bot.send_message(message.chat.id, '⚠️Username was not given in command')
             print("{!s}\n{!s}".format(type(e), str(e)))
-        except telebot.apihelper.ApiTelegramException as e:
-            bot_msg = bot.send_message(message.chat.id, '⛔ ' + e.description)
+        except telebot.asyncio_helper.ApiTelegramException as e:
+            bot_msg = await bot.send_message(message.chat.id, '⛔ ' + e.description)
             print("{!s}\n{!s}".format(type(e), str(e)))
         except tge.UserNotAdminException as e:
-            bot_msg = bot.send_message(message.chat.id, '⛔ You have to be an administrator at least')
+            bot_msg = await bot.send_message(message.chat.id, '⛔ You have to be an administrator at least')
             print("{!s}\n{!s}".format(type(e), str(e)))
         except tge.NoPermissionException as e:
-            bot_msg = bot.send_message(message.chat.id, f'⛔ You do not have a permission to {e.action}')
+            bot_msg = await bot.send_message(message.chat.id, f'⛔ You do not have a permission to {e.action}')
             print("{!s}\n{!s}".format(type(e), str(e)))
         except tge.HelloItsMeException as e:
-            bot_msg = bot.send_message(message.chat.id, str(e))
+            bot_msg = await bot.send_message(message.chat.id, str(e))
             print("{!s}\n{!s}".format(type(e), str(e)))
         except tge.InvalidUsernameException as e:
-            bot_msg = bot.send_message(message.chat.id, '⚠️' + str(e))
+            bot_msg = await bot.send_message(message.chat.id, '⚠️' + str(e))
             print("{!s}\n{!s}".format(type(e), str(e)))
         except tge.UserNotInChatException as e:
-            bot_msg = bot.send_message(message.chat.id, '⚠️' + str(e))
+            bot_msg = await bot.send_message(message.chat.id, '⚠️' + str(e))
             print("{!s}\n{!s}".format(type(e), str(e)))
         except Exception as e:
             print("{!s}\n{!s}".format(type(e), str(e)))
 
-        def delete_alert(chat_id, msg_id):
-            bot.delete_message(chat_id, msg_id)
+        async def delete_alert(chat_id, msg_id):
+            await bot.delete_message(chat_id, msg_id)
 
         if bot_msg is not None:
             try:
-                scheduler.add_job(delete_alert, 'date', run_date=dt.datetime.now() + dt.timedelta(seconds=10),
-                                  kwargs={'chat_id': message.chat.id, 'msg_id': bot_msg.id})
+                await asyncio.sleep(10)
+                await delete_alert(message.chat.id, bot_msg.id)
             except Exception as e:
                 print("{!s}\n{!s}".format(type(e), str(e)))
 
@@ -157,10 +154,10 @@ def add_bot_inline_markup():
 @delete_command_message
 @parse_exceptions
 @add_chat_member
-def start(message):
-    bot.send_sticker(message.chat.id, pth.welcome_sticker)
+async def start(message):
+    await bot.send_sticker(message.chat.id, pth.welcome_sticker)
 
-    bot.send_message(message.chat.id, pth.start_message,
+    await bot.send_message(message.chat.id, pth.start_message,
                      reply_markup=start_message_markup(),
                      parse_mode='MarkdownV2')
 
@@ -172,10 +169,10 @@ def start(message):
 @delete_command_message
 @parse_exceptions
 @add_chat_member
-def help(message):
-    bot.send_sticker(message.chat.id, pth.thinking_sticker)
+async def help(message):
+    await bot.send_sticker(message.chat.id, pth.thinking_sticker)
 
-    bot.send_message(message.chat.id, pth.help_message,
+    await bot.send_message(message.chat.id, pth.help_message,
                      reply_markup=help_message_markup(),
                      parse_mode='MarkdownV2')
 
@@ -184,10 +181,10 @@ def help(message):
 @delete_command_message
 @parse_exceptions
 @add_chat_member
-def add_bot(message):
-    bot.send_sticker(message.chat.id, pth.working_sticker)
+async def add_bot(message):
+    await bot.send_sticker(message.chat.id, pth.working_sticker)
 
-    bot.send_message(message.chat.id, 'Поехали\!',
+    await bot.send_message(message.chat.id, 'Поехали\!',
                      reply_markup=add_bot_button_markup(),
                      parse_mode='MarkdownV2')
 
@@ -198,23 +195,23 @@ def add_bot(message):
 @add_chat_member
 @user_is_admin
 @admin_can_restrict
-def kick_bot(message):
-    bot.send_message(message.chat.id, 'Bye, bye, see you soon✋')
-    bot.send_sticker(message.chat.id, pth.crying_sticker)
-    bot.leave_chat(message.chat.id)
+async def kick_bot(message):
+    await bot.send_message(message.chat.id, 'Bye, bye, see you soon✋')
+    await bot.send_sticker(message.chat.id, pth.crying_sticker)
+    await bot.leave_chat(message.chat.id)
 
 
 @bot.message_handler(commands=['stats'], chat_types=['supergroup', 'group'])
 @delete_command_message
 @add_chat_member
 @parse_exceptions
-def stats(message):
-    members_cnt = bot.get_chat_member_count(message.chat.id)
-    admins_cnt = len(bot.get_chat_administrators(message.chat.id))
+async def stats(message):
+    members_cnt = await bot.get_chat_member_count(message.chat.id)
+    admins_cnt = len(await bot.get_chat_administrators(message.chat.id))
 
-    bot.send_sticker(message.chat.id, pth.dancing_sticker)
+    await bot.send_sticker(message.chat.id, pth.dancing_sticker)
 
-    bot.send_message(message.chat.id, f'*Total members*: {members_cnt}\n*Administrators*: {admins_cnt}',
+    await bot.send_message(message.chat.id, f'*Total members*: {members_cnt}\n*Administrators*: {admins_cnt}',
                      parse_mode='MarkdownV2')
 
 
@@ -225,8 +222,8 @@ def stats(message):
 @user_is_admin
 @admin_can_promote
 @hello_its_me
-def promote_admin(message):
-    cur_user = bot.get_chat_member(message.chat.id, message.from_user.id)
+async def promote_admin(message):
+    cur_user = await bot.get_chat_member(message.chat.id, message.from_user.id)
 
     username = message.text.split()[1]
     user_id = chats.get_user_id(message.chat.id, username)
@@ -234,7 +231,7 @@ def promote_admin(message):
     success = False
 
     if cur_user.status == 'creator':
-        success = bot.promote_chat_member(message.chat.id, user_id,
+        success = await bot.promote_chat_member(message.chat.id, user_id,
                                           can_change_info=False,
                                           can_delete_messages=False,
                                           can_pin_messages=True,
@@ -247,7 +244,7 @@ def promote_admin(message):
                                           can_manage_video_chats=True,
                                           can_manage_voice_chats=True)
     else:
-        success = bot.promote_chat_member(message.chat.id, user_id, can_change_info=cur_user.can_change_info,
+        success = await bot.promote_chat_member(message.chat.id, user_id, can_change_info=cur_user.can_change_info,
                                           can_delete_messages=cur_user.can_delete_messages,
                                           can_pin_messages=cur_user.can_delete_messages,
                                           can_promote_members=cur_user.can_promote_members,
@@ -260,12 +257,11 @@ def promote_admin(message):
                                           can_manage_voice_chats=cur_user.can_manage_voice_chats)
 
     if success:
-        bot.send_message(message.chat.id, f'{username} is now Administrator\!',
-                         parse_mode='MarkdownV2')
+        await bot.send_message(message.chat.id, f'{username} is now Administrator!')
 
-        bot.send_sticker(message.chat.id, pth.boss_sticker)
+        await bot.send_sticker(message.chat.id, pth.boss_sticker)
     else:
-        bot.send_message(message.chat.id, '⚠️Something went wrong',
+        await bot.send_message(message.chat.id, '⚠️Something went wrong',
                          parse_mode='MarkdownV2')
 
 
@@ -276,16 +272,14 @@ def promote_admin(message):
 @user_is_admin
 @admin_can_restrict
 @hello_its_me
-def ban(message):
+async def ban(message):
     username = message.text.split()[1]
     user_id = chats.get_user_id(message.chat.id, username)
 
-    if bot.ban_chat_member(message.chat.id, user_id):
-        bot.send_message(message.chat.id, f'{username} was banned',
-                         parse_mode='MarkdownV2')
+    if await bot.ban_chat_member(message.chat.id, user_id):
+        await bot.send_message(message.chat.id, f'{username} was banned')
     else:
-        bot.send_message(message.chat.id, '⚠️Something went wrong',
-                         parse_mode='MarkdownV2')
+        await bot.send_message(message.chat.id, '⚠️Something went wrong')
 
 
 @bot.message_handler(commands=['unban'], chat_types=['supergroup', 'group'])
@@ -295,35 +289,32 @@ def ban(message):
 @user_is_admin
 @admin_can_restrict
 @hello_its_me
-def unban(message):
+async def unban(message):
     username = message.text.split()[1]
     user_id = chats.get_user_id(message.chat.id, username)
 
-    if bot.unban_chat_member(message.chat.id, user_id, only_if_banned=True):
-        # Я считаю, что качество в мелочах, поэтому я убрал фразу 'he/she can join', вдруг пользователь еще не определился
-        bot.send_message(message.chat.id, f'{username} was unbanned and can join chat again',
-                         parse_mode='MarkdownV2')
+    if await bot.unban_chat_member(message.chat.id, user_id, only_if_banned=True):
+        await bot.send_message(message.chat.id, f'{username} was unbanned and can join chat again')
 
-        bot.send_sticker(message.chat.id, pth.pleased_sticker)
+        await bot.send_sticker(message.chat.id, pth.pleased_sticker)
     else:
-        bot.send_message(message.chat.id, '⚠️Something went wrong',
+        await bot.send_message(message.chat.id, '⚠️Something went wrong',
                          parse_mode='MarkdownV2')
 
 
 @bot.message_handler(content_types=['new_chat_members'])
 @parse_exceptions
-def add_user(message):
+async def add_user(message):
     new_users = message.new_chat_members
-    bot.send_sticker(message.chat.id, pth.welcome_sticker)
+    await bot.send_sticker(message.chat.id, pth.welcome_sticker)
     for user in new_users:
         if '@' + user.username == pth.my_username:
             chats.add_chat(message.chat.id)
-            bot.send_message(message.chat.id, pth.start_message,
+            await bot.send_message(message.chat.id, pth.start_message,
                              reply_markup=start_message_markup(),
                              parse_mode='MarkdownV2')
         else:
-            bot.send_message(message.chat.id, f'Hello, @{user.username}👋\nHow are you\?',
-                             parse_mode='MarkdownV2')
+            await bot.send_message(message.chat.id, f'Hello, @{user.username}👋\nHow are you?')
         chats.add_user(message.chat.id, user.id, user.username,
                        user.first_name, user.last_name,
                        user.is_premium)
@@ -331,118 +322,116 @@ def add_user(message):
 
 @bot.message_handler(content_types=['left_chat_member'])
 @parse_exceptions
-def del_user(message):
+async def del_user(message):
     user = message.left_chat_member
     if '@' + user.username != pth.my_username:
-        bot.send_message(message.chat.id, f'Bye, bye, {user.first_name}✋',
-                         parse_mode='MarkdownV2')
-        bot.send_sticker(message.chat.id, pth.sad_sticker)
+        await bot.send_message(message.chat.id, f'Bye, bye, {user.first_name}✋')
+        await bot.send_sticker(message.chat.id, pth.sad_sticker)
 
 
 @bot.message_handler()
 @add_chat_member
-def add_user(message):
+async def just_message_user(message):
     pass
 
 
 @bot.callback_query_handler(lambda call: call.data == 'help')
-def help_callback(call):
+async def help_callback(call):
     try:
-        bot.edit_message_text(text=pth.help_message,
+        await bot.edit_message_text(text=pth.help_message,
                               chat_id=call.message.chat.id,
                               message_id=call.message.id,
                               reply_markup=help_message_markup(),
                               parse_mode='MarkdownV2')
 
-        bot.answer_callback_query(callback_query_id=call.id)
+        await bot.answer_callback_query(callback_query_id=call.id)
     except Exception as e:
         print("{!s}\n{!s}".format(type(e), str(e)))
 
 
 @bot.callback_query_handler(lambda call: call.data == 'help_clear')
-def help_clear_callback(call):
+async def help_clear_callback(call):
     try:
-        bot.send_sticker(call.message.chat.id, pth.working_sticker)
+        await bot.send_sticker(call.message.chat.id, pth.working_sticker)
 
-        bot.send_message(call.message.chat.id, 'Тогда поехали\!',
+        await bot.send_message(call.message.chat.id, 'Тогда поехали\!',
                          reply_markup=add_bot_button_markup(),
                          parse_mode='MarkdownV2')
 
-        bot.answer_callback_query(callback_query_id=call.id)
+        await bot.answer_callback_query(callback_query_id=call.id)
     except Exception as e:
         print("{!s}\n{!s}".format(type(e), str(e)))
 
 
 @bot.callback_query_handler(lambda call: call.data == 'help_ask')
-def help_ask_callback(call):
+async def help_ask_callback(call):
     try:
         markup = types.InlineKeyboardMarkup()
         item_ask = types.InlineKeyboardButton(text='Задать вопрос', url=pth.ask_smn_url)
         item_back = types.InlineKeyboardButton(text='Назад', callback_data='help')
         markup.add(item_back, item_ask)
 
-        bot.edit_message_text(text=pth.ask_smn_text,
+        await bot.edit_message_text(text=pth.ask_smn_text,
                               chat_id=call.message.chat.id,
                               message_id=call.message.id,
                               reply_markup=markup,
                               parse_mode='MarkdownV2')
 
-        bot.answer_callback_query(callback_query_id=call.id)
+        await bot.answer_callback_query(callback_query_id=call.id)
     except Exception as e:
         print("{!s}\n{!s}".format(type(e), str(e)))
 
 
 @bot.callback_query_handler(lambda call: call.data == 'help_inline')
-def help_callback(call):
+async def help_callback(call):
     try:
-        bot.edit_message_text(text=pth.help_message,
+        await bot.edit_message_text(text=pth.help_message,
                               inline_message_id=call.inline_message_id,
                               reply_markup=help_inline_markup(),
                               parse_mode='MarkdownV2')
 
-        bot.answer_callback_query(callback_query_id=call.id)
+        await bot.answer_callback_query(callback_query_id=call.id)
     except Exception as e:
         print("{!s}\n{!s}".format(type(e), str(e)))
 
 
 @bot.callback_query_handler(lambda call: call.data == 'help_clear_inline')
-def help_clear_inline_callback(call):
+async def help_clear_inline_callback(call):
     try:
-        bot.edit_message_text('Тогда поехали\!',
+        await bot.edit_message_text('Тогда поехали\!',
                               inline_message_id=call.inline_message_id,
                               reply_markup=add_bot_inline_markup(),
                               parse_mode='MarkdownV2')
 
-        bot.answer_callback_query(callback_query_id=call.id)
+        await bot.answer_callback_query(callback_query_id=call.id)
     except Exception as e:
         print("{!s}\n{!s}".format(type(e), str(e)))
 
 
 @bot.callback_query_handler(lambda call: call.data == 'help_ask_inline')
-def help_ask_callback(call):
+async def help_ask_callback(call):
     try:
         markup = types.InlineKeyboardMarkup()
         item_ask = types.InlineKeyboardButton(text='Задать вопрос', url=pth.ask_smn_url)
         item_back = types.InlineKeyboardButton(text='Назад', callback_data='help_inline')
         markup.add(item_back, item_ask)
 
-        bot.edit_message_text(text=pth.ask_smn_text,
+        await bot.edit_message_text(text=pth.ask_smn_text,
                               inline_message_id=call.inline_message_id,
                               reply_markup=markup,
                               parse_mode='MarkdownV2')
 
-        bot.answer_callback_query(callback_query_id=call.id)
+        await bot.answer_callback_query(callback_query_id=call.id)
     except Exception as e:
         print("{!s}\n{!s}".format(type(e), str(e)))
 
 
 @bot.inline_handler(lambda query: query.chat_type == 'sender')
-def answer_query(query):
+async def answer_query(query):
     try:
         r_help = types.InlineQueryResultArticle(
             id='1', title="Help",
-            input_message_content=types.InputTextMessageContent(message_text=pth.help_command,
-                                                                parse_mode='MarkdownV2'),
+            input_message_content=types.InputTextMessageContent(message_text=pth.help_command),
             thumb_url=pth.inline_icons[pth.style]['help'],
             thumb_width=pth.thumb_width,
             thumb_height=pth.thumb_height
@@ -450,13 +439,12 @@ def answer_query(query):
 
         r_add_bot = types.InlineQueryResultArticle(
             id='2', title="Add RomeColaBot to chat",
-            input_message_content=types.InputTextMessageContent(message_text=pth.add_bot_command,
-                                                                parse_mode='MarkdownV2'),
+            input_message_content=types.InputTextMessageContent(message_text=pth.add_bot_command),
             thumb_url=pth.inline_icons[pth.style]['add_bot'],
             thumb_width=pth.thumb_width,
             thumb_height=pth.thumb_height
         )
-        bot.answer_inline_query(query.id, [r_help, r_add_bot])
+        await bot.answer_inline_query(query.id, [r_help, r_add_bot])
     except Exception as e:
         print("{!s}\n{!s}".format(type(e), str(e)))
 
@@ -474,8 +462,7 @@ def inline_query_results_help_add():
 
     r_add_bot = types.InlineQueryResultArticle(
         id='2', title="Add RomeColaBot to chat",
-        input_message_content=types.InputTextMessageContent(message_text='Поехали\!',
-                                                            parse_mode='MarkdownV2'),
+        input_message_content=types.InputTextMessageContent(message_text='Поехали!'),
         reply_markup=add_bot_button_markup(),
         thumb_url=pth.inline_icons[pth.style]['add_bot'],
         thumb_width=pth.thumb_width,
@@ -485,20 +472,19 @@ def inline_query_results_help_add():
 
 
 @bot.inline_handler(lambda query: query.chat_type == 'private')
-def answer_query(query):
+async def answer_query(query):
     try:
-        bot.answer_inline_query(query.id, inline_query_results_help_add())
+        await bot.answer_inline_query(query.id, inline_query_results_help_add())
     except Exception as e:
         print("{!s}\n{!s}".format(type(e), str(e)))
 
 
 @bot.inline_handler(lambda query: query.chat_type in ['group', 'supergroup'] and len(query.query) == 0)
-def answer_query(query):
+async def answer_query(query):
     try:
         r_stats = types.InlineQueryResultArticle(
             id='3', title="Show chat statistics",
-            input_message_content=types.InputTextMessageContent(message_text=pth.stats_command,
-                                                                parse_mode='MarkdownV2'),
+            input_message_content=types.InputTextMessageContent(message_text=pth.stats_command),
             description='See number of users and admins (add me to chat first)',
             thumb_url=pth.inline_icons[pth.style]['stats'],
             thumb_width=pth.thumb_width,
@@ -507,27 +493,25 @@ def answer_query(query):
 
         r_kick_bot = types.InlineQueryResultArticle(
             id='4', title="Kick RomeColaBot",
-            input_message_content=types.InputTextMessageContent(message_text=pth.kick_bot_command,
-                                                                parse_mode='MarkdownV2'),
+            input_message_content=types.InputTextMessageContent(message_text=pth.kick_bot_command),
             description='Be careful, please',
             thumb_url=pth.inline_icons[pth.style]['kick_bot'],
             thumb_width=pth.thumb_width,
             thumb_height=pth.thumb_height
         )
 
-        bot.answer_inline_query(query.id, inline_query_results_help_add() + [r_stats, r_kick_bot])
+        await bot.answer_inline_query(query.id, inline_query_results_help_add() + [r_stats, r_kick_bot])
     except Exception as e:
         print("{!s}\n{!s}".format(type(e), str(e)))
 
 
 @bot.inline_handler(lambda query: query.chat_type in ['group', 'supergroup'] and
                                   len(query.query) > 0 and query.query[0] == '@')
-def answer_query(query):
+async def answer_query(query):
     try:
         r_promote = types.InlineQueryResultArticle(
             id='1', title="Promote member",
-            input_message_content=types.InputTextMessageContent(message_text=pth.promote_command + ' ' + query.query,
-                                                                parse_mode='MarkdownV2'),
+            input_message_content=types.InputTextMessageContent(message_text=pth.promote_command + ' ' + query.query),
             description=pth.promote_description,
             thumb_url=pth.inline_icons[pth.style]['promote'],
             thumb_width=pth.thumb_width,
@@ -536,8 +520,7 @@ def answer_query(query):
 
         r_ban = types.InlineQueryResultArticle(
             id='2', title="Ban member",
-            input_message_content=types.InputTextMessageContent(message_text=pth.ban_command + ' ' + query.query,
-                                                                parse_mode='MarkdownV2'),
+            input_message_content=types.InputTextMessageContent(message_text=pth.ban_command + ' ' + query.query),
             description=pth.ban_description,
             thumb_url=pth.inline_icons[pth.style]['ban'],
             thumb_width=pth.thumb_width,
@@ -546,18 +529,17 @@ def answer_query(query):
 
         r_unban = types.InlineQueryResultArticle(
             id='3', title="Unban member",
-            input_message_content=types.InputTextMessageContent(message_text=pth.unban_command + ' ' + query.query,
-                                                                parse_mode='MarkdownV2'),
+            input_message_content=types.InputTextMessageContent(message_text=pth.unban_command + ' ' + query.query),
             description=pth.unban_description,
             thumb_url=pth.inline_icons[pth.style]['unban'],
             thumb_width=pth.thumb_width,
             thumb_height=pth.thumb_height
         )
 
-        bot.answer_inline_query(query.id, [r_promote, r_ban, r_unban])
+        await bot.answer_inline_query(query.id, [r_promote, r_ban, r_unban])
     except Exception as e:
         print("{!s}\n{!s}".format(type(e), str(e)))
 
 
 if __name__ == '__main__':
-    bot.infinity_polling()
+    asyncio.run(bot.infinity_polling())
