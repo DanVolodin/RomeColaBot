@@ -15,6 +15,7 @@ def add_chat_member(command_action):
     async def wrapper(message):
         user = message.from_user
         if message.chat.type in ['supergroup', 'group']:
+            chats.add_chat(message.chat.id)
             chats.add_user(message.chat.id, user.id, user.username,
                            user.first_name, user.last_name,
                            user.is_premium)

@@ -1,4 +1,4 @@
-CLEAR = False
+CLEAR = True
 
 TOKEN = '5861365734:AAHsaiUqaOKEeW0uY1Ewa8JCxCLagRtBsHE'
 my_username = '@romecolabot'
