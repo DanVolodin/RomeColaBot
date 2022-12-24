@@ -1,0 +1,18 @@
+version: "3.3"
+
+services:
+
+  bot:
+    build: bot/
+
+    command: python ./main.py
+
+  database:
+    build: database/
+
+    command: python ./db.py
+
+#networks:
+#  default:
+#    name: bridge-nework
+#    external: true
